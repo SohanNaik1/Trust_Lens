@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrustLens: Neural // Advanced Threat Intelligence</title>
+    
+    <!-- Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    
+    <!-- Markdown Parser -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        tech: ['Rajdhani', 'sans-serif'],
+                    },
+                    colors: {
+                        'deep-space': '#030712',
+                        'glass': 'rgba(255, 255, 255, 0.03)',
+                        'glass-border': 'rgba(255, 255, 255, 0.08)',
+                        'accent-cyan': '#06b6d4',
+                        'accent-violet': '#8b5cf6',
+                        'signal-success': '#10b981',
+                        'signal-warn': '#f59e0b',
+                        'signal-danger': '#ef4444',
+                    },
+                    animation: {
+                        'spin-slow': 'spin 8s linear infinite',
+                        'pulse-glow': 'pulseGlow 3s ease-in-out infinite',
+                        'scan-vertical': 'scanVertical 2s linear infinite',
+                    },
+                    keyframes: {
+                        pulseGlow: {
+                            '0%, 100%': { opacity: 0.6, filter: 'brightness(1)' },
+                            '50%': { opacity: 1, filter: 'brightness(1.2)' },
+                        },
+                        scanVertical: {
+                            '0%': { top: '0%', opacity: 0 },
+                            '15%': { opacity: 1 },
+                            '85%': { opacity: 1 },
+                            '100%': { top: '100%', opacity: 0 },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #030712;
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+
+        #canvas-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.4;
+        }
+
+        .glass-card {
+            background: linear-gradient(145deg, rgba(17, 24, 39, 0.9), rgba(17, 24, 39, 0.6));
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            transition: border-color 0.3s ease;
+        }
+
+        .glass-card.error-state {
+            border-color: rgba(239, 68, 68, 0.5);
+            background: linear-gradient(145deg, rgba(69, 10, 10, 0.7), rgba(17, 24, 39, 0.4));
+        }
+
+        .glass-modal {
+            background: rgba(10, 10, 15, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+        }
+
+        .holo-text {
+            background: linear-gradient(to right, #06b6d4, #8b5cf6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: 0 0 30px rgba(6, 182, 212, 0.3);
+        }
+
+        /* Advanced Progress Circle */
+        .progress-ring circle {
+            transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.5s ease;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+
+        /* Input Field */
+        .tech-input {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(6, 182, 212, 0.2);
+            transition: all 0.3s ease;
+        }
+        .tech-input:focus {
+            border-color: #06b6d4;
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.2);
+        }
+
+        /* Markdown Styles */
+        .ai-response h3 {
+            font-family: 'Rajdhani', sans-serif;
+            color: #06b6d4;
+            font-size: 1.1rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+            border-left: 3px solid #06b6d4;
+            padding-left: 0.5rem;
+        }
+        .ai-response p { margin-bottom: 0.75rem; line-height: 1.6; color: #cbd5e1; font-size: 0.95rem; }
+        .ai-response strong { color: #fff; font-weight: 600; }
+        .ai-response ul { list-style: none; padding-left: 0; margin-bottom: 1rem; }
+        .ai-response li { position: relative; padding-left: 1.2rem; margin-bottom: 0.4rem; }
+        .ai-response li::before {
+            content: '>';
+            position: absolute;
+            left: 0;
+            color: #8b5cf6;
+            font-weight: bold;
+        }
+
+        /* Scan Line Overlay */
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(to right, transparent, #06b6d4, transparent);
+            opacity: 0;
+            pointer-events: none;
+        }
+        .scanning .scan-line {
+            animation: scanVertical 1.5s linear infinite;
+            opacity: 0.5;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            box-shadow: 0 0 10px currentColor;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4 md:p-8 relative">
+
+    <canvas id="canvas-bg"></canvas>
+
+    <!-- API Key Modal -->
+    <div id="settings-modal" class="hidden fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-modal w-full max-w-md p-6 rounded-xl border border-cyan-500/30">
+            <h2 class="text-xl font-bold text-white mb-4 tech-font tracking-wide">SYSTEM CONFIGURATION</h2>
+            <p class="text-slate-400 text-sm mb-4">Enter your Google Gemini API Key to enable neural analysis features.</p>
+            
+            <label class="block text-xs text-cyan-400 uppercase tracking-widest mb-2">API Key</label>
+            <input type="password" id="api-key-input" class="w-full bg-black/50 border border-slate-700 rounded px-4 py-3 text-white focus:border-cyan-500 focus:outline-none mb-4 font-mono text-sm" placeholder="AIzaSy...">
+            
+            <div class="flex justify-end gap-3">
+                <button onclick="document.getElementById('settings-modal').classList.add('hidden')" class="px-4 py-2 text-slate-400 hover:text-white transition-colors cursor-pointer">CANCEL</button>
+                <button id="save-settings" class="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded transition-colors cursor-pointer">SAVE CONFIG</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="w-full max-w-5xl flex justify-between items-center mb-8 z-10">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500/20 to-violet-500/20 border border-cyan-500/30 flex items-center justify-center backdrop-blur-md">
+                <i class="ph-bold ph-shield-check text-cyan-400 text-xl"></i>
+            </div>
+            <div>
+                <h1 class="font-tech text-2xl font-bold tracking-wide text-white">TRUSTLENS <span class="text-cyan-400">NEURAL</span></h1>
+                <p class="text-xs text-slate-400 tracking-widest font-medium">INTELLIGENT THREAT DEFENSE</p>
+            </div>
+        </div>
+        
+        <!-- SETTINGS BUTTON -->
+        <button onclick="document.getElementById('settings-modal').classList.remove('hidden')" class="flex items-center gap-2 px-4 py-2 rounded-full border border-slate-600 bg-slate-800/80 hover:bg-slate-700 hover:border-cyan-500 text-slate-300 hover:text-cyan-400 transition-all cursor-pointer z-50">
+            <i class="ph-bold ph-gear text-lg"></i>
+            <span class="font-bold text-xs tracking-wide">SETTINGS</span>
+        </button>
+    </header>
+
+    <!-- Main Container -->
+    <main class="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-6 z-10">
+
+        <!-- Left Panel: Input & Core Status -->
+        <div class="lg:col-span-5 space-y-6">
+            
+            <!-- Input Card -->
+            <div class="glass-card rounded-2xl p-1 overflow-hidden relative group">
+                <div class="absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-violet-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                <div class="scan-line z-20" id="scan-line-overlay"></div>
+                
+                <div class="bg-gray-900/80 backdrop-blur-xl rounded-xl p-6 relative z-10">
+                    <label class="text-xs font-tech text-cyan-400 uppercase tracking-widest mb-3 block">Target URL Analysis</label>
+                    
+                    <form id="analysis-form" class="relative">
+                        <div class="relative">
+                            <input type="text" id="url-input" autocomplete="off"
+                                class="tech-input w-full h-12 pl-10 pr-4 rounded-lg text-sm text-white placeholder-slate-600 focus:outline-none font-mono"
+                                placeholder="example.com">
+                            <i class="ph-bold ph-link absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                        </div>
+                        
+                        <button type="submit" id="scan-btn"
+                            class="mt-4 w-full h-12 bg-gradient-to-r from-cyan-600 to-violet-600 hover:from-cyan-500 hover:to-violet-500 text-white font-tech font-bold text-sm tracking-widest rounded-lg shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all transform active:scale-[0.98] flex items-center justify-center gap-2">
+                            <span>INITIATE SCAN</span>
+                            <i class="ph-bold ph-caret-right"></i>
+                        </button>
+                    </form>
+                    <div id="error-msg" class="text-red-400 text-xs mt-2 h-4 text-center font-mono opacity-0 transition-opacity"></div>
+                </div>
+            </div>
+
+            <!-- Score Card -->
+            <div id="score-card" class="glass-card rounded-2xl p-8 flex flex-col items-center justify-center relative overflow-hidden min-h-[300px]">
+                
+                <!-- Normal State Content -->
+                <div id="score-content" class="flex flex-col items-center w-full transition-opacity duration-300">
+                    <div class="absolute top-0 right-0 p-4 opacity-20 pointer-events-none">
+                        <i class="ph-duotone ph-radar text-6xl text-cyan-500 animate-pulse-glow"></i>
+                    </div>
+
+                    <h3 class="text-slate-400 font-tech text-sm uppercase tracking-widest mb-6">Trust Integrity Score</h3>
+                    
+                    <!-- Animated Ring -->
+                    <div class="relative w-48 h-48">
+                        <svg class="w-full h-full drop-shadow-[0_0_15px_rgba(6,182,212,0.3)]" viewBox="0 0 120 120">
+                            <!-- Background Track -->
+                            <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="8" />
+                            <!-- Progress Path -->
+                            <circle 
+                                id="score-ring"
+                                class="progress-ring"
+                                cx="60" cy="60" r="54" 
+                                fill="none" 
+                                stroke="#334155" 
+                                stroke-width="8"
+                                stroke-linecap="round"
+                                stroke-dasharray="339.292"
+                                stroke-dashoffset="339.292"
+                            />
+                        </svg>
+                        
+                        <div class="absolute inset-0 flex flex-col items-center justify-center">
+                            <span id="score-val" class="text-5xl font-bold text-slate-600 font-tech">--</span>
+                            <span id="score-label" class="text-xs text-slate-600 font-mono uppercase mt-1">Idle</span>
+                        </div>
+                    </div>
+
+                    <div id="verdict-badge" class="mt-8 px-6 py-2 rounded-full bg-slate-800/50 border border-slate-700 text-slate-500 text-sm font-tech tracking-widest uppercase transition-all duration-500">
+                        System Ready
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Deep Analysis -->
+        <div class="lg:col-span-7 space-y-6">
+            
+            <!-- Technical Metrics Grid -->
+            <div class="grid grid-cols-2 gap-4">
+                <!-- Metric 1 -->
+                <div class="glass-card rounded-xl p-4 border-l-2 border-l-slate-700 transition-colors duration-500" id="card-tld">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-[10px] text-slate-400 font-tech uppercase tracking-widest">Extension</span>
+                        <i class="ph-fill ph-globe text-slate-600"></i>
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <span id="meta-tld" class="text-xl font-bold text-slate-300">---</span>
+                    </div>
+                </div>
+
+                <!-- Metric 2 -->
+                <div class="glass-card rounded-xl p-4 border-l-2 border-l-slate-700 transition-colors duration-500" id="card-proto">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-[10px] text-slate-400 font-tech uppercase tracking-widest">Protocol</span>
+                        <i class="ph-fill ph-lock-key text-slate-600"></i>
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <span id="meta-proto" class="text-xl font-bold text-slate-300">---</span>
+                    </div>
+                </div>
+
+                 <!-- Metric 3 -->
+                 <div class="glass-card rounded-xl p-4 border-l-2 border-l-slate-700 transition-colors duration-500" id="card-entropy">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-[10px] text-slate-400 font-tech uppercase tracking-widest">Entropy</span>
+                        <i class="ph-fill ph-wave-sine text-slate-600"></i>
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <span id="meta-entropy" class="text-xl font-bold text-slate-300">---</span>
+                    </div>
+                </div>
+
+                 <!-- Metric 4 -->
+                 <div class="glass-card rounded-xl p-4 border-l-2 border-l-slate-700 transition-colors duration-500" id="card-brand">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-[10px] text-slate-400 font-tech uppercase tracking-widest">Brand Logic</span>
+                        <i class="ph-fill ph-trademark-registered text-slate-600"></i>
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <span id="meta-brand" class="text-xl font-bold text-slate-300">---</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Analysis Terminal -->
+            <div class="glass-card rounded-2xl p-6 min-h-[300px] relative overflow-hidden flex flex-col">
+                <div class="flex items-center justify-between mb-6 border-b border-white/5 pb-4">
+                    <div class="flex items-center gap-2">
+                        <i class="ph-fill ph-brain text-violet-400 text-xl"></i>
+                        <h2 class="font-tech font-bold text-white tracking-wide">NEURAL ANALYSIS KERNEL</h2>
+                    </div>
+                    <span id="ai-status" class="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-500">IDLE</span>
+                </div>
+
+                <div id="ai-loader" class="flex-grow flex flex-col items-center justify-center text-slate-500 hidden">
+                    <div class="flex items-center gap-1 mb-4">
+                         <span class="w-1 h-8 bg-cyan-500 animate-[pulse_0.5s_ease-in-out_infinite]"></span>
+                         <span class="w-1 h-6 bg-cyan-500 animate-[pulse_0.5s_ease-in-out_0.1s_infinite]"></span>
+                         <span class="w-1 h-10 bg-cyan-500 animate-[pulse_0.5s_ease-in-out_0.2s_infinite]"></span>
+                         <span class="w-1 h-4 bg-cyan-500 animate-[pulse_0.5s_ease-in-out_0.3s_infinite]"></span>
+                    </div>
+                    <p class="font-mono text-xs text-cyan-400">CONNECTING TO GATEWAY...</p>
+                </div>
+                
+                <div id="ai-placeholder" class="flex-grow flex flex-col items-center justify-center text-slate-600 opacity-50">
+                    <i class="ph-duotone ph-terminal-window text-6xl mb-2"></i>
+                    <p class="font-tech tracking-widest text-sm">AWAITING TARGET</p>
+                </div>
+
+                <div id="ai-content" class="ai-response hidden overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
+                    <!-- Content injected here -->
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // --- 0. CONFIGURATION ---
+        // !!! IMPORTANT: PASTE YOUR API KEY HERE IF YOU WANT IT HARDCODED !!!
+        const SYSTEM_API_KEY = "AIzaSyDnVpTYI7VT8ow0D_1x_EMtbaLiCoO4ylg"; 
+
+        // --- BACKGROUND ANIMATION ---
+        const canvas = document.getElementById('canvas-bg');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        let particles = [];
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+
+        class Particle {
+            constructor() { this.reset(); }
+            reset() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.size = Math.random() * 2;
+                this.speedX = (Math.random() - 0.5) * 0.5;
+                this.speedY = (Math.random() - 0.5) * 0.5;
+                this.alpha = Math.random() * 0.5;
+            }
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                if (this.x < 0 || this.x > width || this.y < 0 || this.y > height) this.reset();
+            }
+            draw() {
+                ctx.fillStyle = `rgba(6, 182, 212, ${this.alpha})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function initParticles() {
+            resize();
+            particles = [];
+            for(let i = 0; i < 80; i++) particles.push(new Particle());
+        }
+
+        function animateParticles() {
+            ctx.clearRect(0, 0, width, height);
+            particles.forEach(p => { p.update(); p.draw(); });
+            requestAnimationFrame(animateParticles);
+        }
+        window.addEventListener('resize', resize);
+        initParticles();
+        animateParticles();
+
+        // --- CORE LOGIC ---
+
+        const DOM = {
+            form: document.getElementById('analysis-form'),
+            input: document.getElementById('url-input'),
+            btn: document.getElementById('scan-btn'),
+            error: document.getElementById('error-msg'),
+            scoreCard: document.getElementById('score-card'),
+            scoreContent: document.getElementById('score-content'),
+            ring: document.getElementById('score-ring'),
+            scoreVal: document.getElementById('score-val'),
+            scoreLabel: document.getElementById('score-label'),
+            verdictBadge: document.getElementById('verdict-badge'),
+            cardTld: document.getElementById('card-tld'),
+            cardProto: document.getElementById('card-proto'),
+            cardEntropy: document.getElementById('card-entropy'),
+            cardBrand: document.getElementById('card-brand'),
+            metaTld: document.getElementById('meta-tld'),
+            metaProto: document.getElementById('meta-proto'),
+            metaEntropy: document.getElementById('meta-entropy'),
+            metaBrand: document.getElementById('meta-brand'),
+            aiLoader: document.getElementById('ai-loader'),
+            aiPlaceholder: document.getElementById('ai-placeholder'),
+            aiContent: document.getElementById('ai-content'),
+            aiStatus: document.getElementById('ai-status'),
+            // Config
+            modal: document.getElementById('settings-modal'),
+            apiKeyInput: document.getElementById('api-key-input'),
+            saveSettings: document.getElementById('save-settings')
+        };
+
+        // CONSTANTS
+        const SAFE_TLDS = ['com', 'org', 'net', 'edu', 'gov', 'mil', 'io', 'co', 'uk', 'ca', 'de', 'jp'];
+        const RISKY_TLDS = ['xyz', 'zip', 'mov', 'top', 'gq', 'tk', 'ml', 'cf', 'ru', 'cn', 'cam', 'click'];
+        const TARGET_BRANDS = ['google', 'microsoft', 'apple', 'amazon', 'paypal', 'facebook', 'netflix', 'chase', 'bank', 'adobe', 'twitter', 'linkedin', 'instagram'];
+
+        let userApiKey = localStorage.getItem('gemini_api_key') || '';
+        if(userApiKey) DOM.apiKeyInput.value = userApiKey;
+
+        // --- HANDLERS ---
+        DOM.saveSettings.onclick = () => {
+            userApiKey = DOM.apiKeyInput.value.trim();
+            localStorage.setItem('gemini_api_key', userApiKey);
+            DOM.modal.classList.add('hidden');
+            alert("Configuration Saved.");
+        };
+
+        // --- SCAN LOGIC ---
+
+        DOM.form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const rawUrl = DOM.input.value.trim();
+            if(!rawUrl) return showError("Input cannot be empty");
+
+            let url;
+            try {
+                let formatted = rawUrl;
+                if (!formatted.startsWith('http')) formatted = `https://${formatted}`;
+                url = new URL(formatted);
+                // Strict validation
+                if (!url.hostname.includes('.') || url.hostname.split('.').pop().length < 2) {
+                    throw new Error("Invalid domain structure");
+                }
+            } catch(err) {
+                return showError("Invalid URL format");
+            }
+
+            // Start Scan
+            DOM.error.style.opacity = '0';
+            DOM.form.parentElement.classList.add('scanning');
+            DOM.btn.disabled = true;
+            DOM.btn.innerHTML = `<i class="ph-bold ph-spinner animate-spin"></i> SCANNING...`;
+            resetUI();
+
+            const staticMetrics = runHeuristics(url);
+            updateMetricsUI(staticMetrics);
+            DOM.scoreVal.textContent = "...";
+            DOM.ring.style.stroke = "#64748b";
+
+            // Determine Key (User > System)
+            const activeKey = userApiKey || SYSTEM_API_KEY;
+
+            if (activeKey) {
+                DOM.aiPlaceholder.classList.add('hidden');
+                DOM.aiLoader.classList.remove('hidden');
+                DOM.aiStatus.textContent = "PROCESSING";
+                DOM.aiStatus.className = "text-[10px] px-2 py-1 rounded bg-violet-900 text-violet-200 animate-pulse";
+
+                try {
+                    const aiResult = await getAIAnalysis(url.href, staticMetrics, activeKey);
+                    
+                    // Blend scores: 40% Heuristic, 60% AI
+                    const finalScore = Math.round((staticMetrics.rawScore * 0.4) + (aiResult.safety_rating * 0.6));
+                    
+                    animateScore(finalScore);
+                    renderAIResult(aiResult.reasoning);
+                } catch (e) {
+                    console.error(e);
+                    showError("AI Connection Failed");
+                    animateScore(staticMetrics.rawScore); // Fallback to heuristic score
+                    renderAIResult("### Connection Error\nNeural analysis failed. Displaying heuristic data only.");
+                }
+            } else {
+                // No key provided
+                animateScore(staticMetrics.rawScore);
+                renderAIResult("### AI Offline\nNo API Key provided. Please enter a key in Settings to enable Neural Analysis.");
+            }
+
+            DOM.form.parentElement.classList.remove('scanning');
+            DOM.btn.disabled = false;
+            DOM.btn.innerHTML = `<span>INITIATE SCAN</span><i class="ph-bold ph-caret-right"></i>`;
+        });
+
+        // --- HELPERS ---
+
+        function runHeuristics(url) {
+            let score = 65;
+            const parts = url.hostname.split('.');
+            const tld = parts[parts.length - 1];
+            const coreName = parts.length > 1 ? parts[parts.length - 2] : parts[0];
+            
+            // TLD Check
+            let tldStatus = "Standard";
+            if (SAFE_TLDS.includes(tld)) { score += 15; tldStatus = "Trusted"; }
+            else if (RISKY_TLDS.includes(tld)) { score -= 30; tldStatus = "High Risk"; }
+
+            // Protocol
+            let protoStatus = "Secure";
+            if (url.protocol === 'https:') { score += 10; }
+            else { score -= 20; protoStatus = "Insecure"; }
+            
+            // Entropy calculation
+            const frequencies = {};
+            for (let char of coreName) frequencies[char] = (frequencies[char] || 0) + 1;
+            const entropy = Object.values(frequencies).reduce((sum, f) => {
+                const p = f / coreName.length;
+                return sum - p * Math.log2(p);
+            }, 0);
+
+            let entropyStatus = entropy > 3.8 ? "High (Chaotic)" : "Low (Stable)";
+            if (entropy > 3.8) score -= 15;
+            else score += 5;
+
+            // Typosquatting / Brand
+            let brandStatus = "Generic";
+            let typosquat = false;
+            
+            // Direct substring check
+            const hasBrand = TARGET_BRANDS.some(b => url.hostname.includes(b));
+            
+            if (!hasBrand) {
+                // Levenshtein check
+                for (let brand of TARGET_BRANDS) {
+                    if (levenshtein(coreName, brand) === 1 && coreName.length > 3) {
+                        typosquat = true;
+                        brandStatus = `Spoof: ${brand}`;
+                        break;
+                    }
+                }
+            } else {
+                // Known brand string found, verify official status
+                const isOfficial = TARGET_BRANDS.some(b => url.hostname.endsWith(`.${b}.com`) || url.hostname === `${b}.com`);
+                if (isOfficial) {
+                    score += 20;
+                    brandStatus = "Verified Official";
+                } else {
+                    score -= 40;
+                    brandStatus = "Suspicious Brand Usage";
+                }
+            }
+
+            if (typosquat) score -= 50;
+
+            return {
+                rawScore: Math.max(0, Math.min(100, score)),
+                tld: `.${tld.toUpperCase()}`,
+                proto: url.protocol.replace(':','').toUpperCase(),
+                protoStatus,
+                entropy: entropy.toFixed(2),
+                entropyStatus,
+                brandStatus
+            };
+        }
+
+        async function getAIAnalysis(urlString, metrics, key) {
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${key}`;
+
+            const prompt = `
+            Act as a Cyber Security Analyst. Analyze: "${urlString}".
+            
+            Telemetry:
+            - Heuristic Score: ${metrics.rawScore}/100
+            - TLD Risk: ${metrics.tld}
+            - Brand Analysis: ${metrics.brandStatus}
+            
+            Task:
+            1. Verify if this is a legitimate URL or a phishing attempt.
+            2. Assign a safety_rating (0-100).
+            3. Provide a short reasoning.
+
+            Return JSON ONLY:
+            {
+                "safety_rating": number,
+                "reasoning": "Markdown string"
+            }
+            `;
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+
+            if (!response.ok) throw new Error("AI Error");
+            const data = await response.json();
+            
+            let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            
+            if (jsonMatch) return JSON.parse(jsonMatch[0]);
+            
+            return {
+                safety_rating: metrics.rawScore,
+                reasoning: text || "Analysis completed."
+            };
+        }
+
+        // --- UI UPDATERS ---
+
+        function updateMetricsUI(data) {
+            DOM.metaTld.textContent = data.tld;
+            DOM.metaProto.textContent = data.proto;
+            DOM.metaEntropy.textContent = data.entropy;
+            DOM.metaBrand.textContent = data.brandStatus;
+            
+            setCardColor(DOM.cardTld, 'slate');
+            setCardColor(DOM.cardProto, data.protoStatus === 'Insecure' ? 'red' : 'slate');
+            setCardColor(DOM.cardEntropy, parseFloat(data.entropy) > 3.8 ? 'red' : 'slate');
+            setCardColor(DOM.cardBrand, data.brandStatus.includes('Spoof') || data.brandStatus.includes('Suspicious') ? 'red' : (data.brandStatus.includes('Verified') ? 'green' : 'slate'));
+        }
+
+        function renderAIResult(markdown) {
+            DOM.aiLoader.classList.add('hidden');
+            DOM.aiContent.classList.remove('hidden');
+            DOM.aiContent.innerHTML = marked.parse(markdown);
+            DOM.aiStatus.textContent = "COMPLETE";
+            DOM.aiStatus.className = "text-[10px] px-2 py-1 rounded bg-emerald-900 text-emerald-200";
+        }
+
+        function resetUI() {
+            DOM.aiContent.innerHTML = '';
+            DOM.aiContent.classList.add('hidden');
+            DOM.scoreVal.textContent = '--';
+            DOM.scoreVal.style.color = '';
+            DOM.ring.style.stroke = '#334155';
+            DOM.ring.style.strokeDashoffset = 339.292;
+            DOM.verdictBadge.textContent = 'SYSTEM READY';
+            DOM.verdictBadge.className = 'mt-8 px-6 py-2 rounded-full bg-slate-800/50 border border-slate-700 text-slate-500 text-sm font-tech tracking-widest uppercase';
+            
+            DOM.scoreContent.classList.remove('opacity-0', 'pointer-events-none');
+            DOM.scoreCard.classList.remove('error-state');
+            
+            ['Tld', 'Proto', 'Entropy', 'Brand'].forEach(k => {
+                DOM['meta'+k].textContent = '---';
+                setCardColor(DOM['card'+k], 'slate');
+            });
+        }
+
+        function animateScore(target) {
+            const circle = DOM.ring;
+            const circumference = 339.292;
+            const offset = circumference - (target / 100) * circumference;
+            circle.style.strokeDashoffset = offset;
+            
+            let color = '#ef4444'; // Red
+            let verdict = 'CRITICAL THREAT';
+            let bg = 'bg-red-500/10 border-red-500/30 text-red-400';
+
+            if (target >= 90) {
+                color = '#10b981'; verdict = 'VERIFIED SAFE'; bg = 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400';
+            } else if (target >= 70) {
+                color = '#06b6d4'; verdict = 'LIKELY SAFE'; bg = 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400';
+            } else if (target >= 50) {
+                color = '#f59e0b'; verdict = 'UNCERTAIN'; bg = 'bg-amber-500/10 border-amber-500/30 text-amber-400';
+            }
+
+            circle.style.stroke = color;
+            DOM.scoreLabel.textContent = target >= 90 ? 'Excellent' : 'Risk';
+            DOM.verdictBadge.className = `mt-8 px-6 py-2 rounded-full text-sm font-tech tracking-widest uppercase transition-all duration-500 border ${bg}`;
+            DOM.verdictBadge.textContent = verdict;
+            DOM.scoreVal.style.color = color;
+
+            let current = 0;
+            const interval = setInterval(() => {
+                if (current >= target) { current = target; clearInterval(interval); }
+                DOM.scoreVal.textContent = current;
+                current++;
+            }, 10);
+        }
+
+        function setCardColor(el, color) {
+            if (color === 'red') el.className = `glass-card rounded-xl p-4 border-l-2 transition-colors duration-500 border-l-red-500 bg-red-900/10`;
+            else if (color === 'green') el.className = `glass-card rounded-xl p-4 border-l-2 transition-colors duration-500 border-l-emerald-500 bg-emerald-900/10`;
+            else el.className = `glass-card rounded-xl p-4 border-l-2 transition-colors duration-500 border-l-slate-700`;
+        }
+
+        function showError(msg) {
+            DOM.error.textContent = msg;
+            DOM.error.style.opacity = '1';
+            setTimeout(() => DOM.error.style.opacity = '0', 3000);
+        }
+
+        function levenshtein(a, b) {
+            const matrix = [];
+            for(let i=0; i<=b.length; i++) matrix[i] = [i];
+            for(let j=0; j<=a.length; j++) matrix[0][j] = j;
+            for(let i=1; i<=b.length; i++){
+                for(let j=1; j<=a.length; j++){
+                    if(b.charAt(i-1) == a.charAt(j-1)) matrix[i][j] = matrix[i-1][j-1];
+                    else matrix[i][j] = Math.min(matrix[i-1][j-1]+1, Math.min(matrix[i][j-1]+1, matrix[i-1][j]+1));
+                }
+            }
+            return matrix[b.length][a.length];
+        }
+    </script>
+</body>
+</html>
